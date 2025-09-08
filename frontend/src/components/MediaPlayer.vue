@@ -1,41 +1,38 @@
 <template>
   <div class="player-overlay">
-    <div class="player-container">
-      <!-- Seek Indicator -->
+    <div
+      class="player-container"
+      @click="handleTap"
+      @touchstart="handleTouchStart"
+      @touchmove="handleTouchMove"
+      @touchend="handleTouchEnd"
+    >
       <div class="seek-indicator" :class="{ visible: seekIndicatorVisible }">
         <img v-if="seekTimeOffset > 0" src="/icons/next.png" alt="Forward" />
         <img v-else src="/icons/back.png" alt="Rewind" />
         <span>{{ formattedSeekOffset }}</span>
       </div>
 
-      <!-- Loading Spinner -->
       <div v-if="loading" class="loading-spinner"></div>
 
-      <div
-        class="player-ui"
-        :class="{ 'controls-hidden': !controlsVisible }"
-        @click="handleTap"
-        @touchstart="handleTouchStart"
-        @touchmove="handleTouchMove"
-        @touchend="handleTouchEnd"
+      <video
+        ref="video"
+        class="video-player"
+        autoplay
+        playsinline
+        @loadedmetadata="initializePlayer"
+        @timeupdate="updateProgress"
+        @volumechange="updateVolumeState"
+        @play="handlePlay"
+        @pause="() => (playing = false)"
+        @waiting="loading = true"
+        @playing="loading = false"
       >
-        <video
-          ref="video"
-          class="video-player"
-          autoplay
-          playsinline
-          @loadedmetadata="initializePlayer"
-          @timeupdate="updateProgress"
-          @volumechange="updateVolumeState"
-          @play="handlePlay"
-          @pause="() => (playing = false)"
-          @waiting="loading = true"
-          @playing="loading = false"
-        >
-          <source :src="selectedUrl" type="video/mp4" />
-          Your browser does not support video.
-        </video>
+        <source :src="selectedUrl" type="video/mp4" />
+        Your browser does not support video.
+      </video>
 
+      <div class="player-ui" :class="{ 'controls-hidden': !controlsVisible }">
         <div v-if="!playing && !loading" class="center-play-pause">
           <img src="/icons/play-button.png" alt="Play" />
         </div>
@@ -44,7 +41,6 @@
           <img src="/icons/arrow.png" alt="Back" />
         </button>
 
-        <!-- Controls -->
         <div class="controls-wrapper" @click.stop>
           <div class="progress-bar-container" @click="seek">
             <div class="progress-bar">
@@ -55,7 +51,6 @@
             </div>
           </div>
           <div class="controls">
-            <!-- Left Controls -->
             <div class="controls-left">
               <button class="control-btn" @click="togglePlay">
                 <img
@@ -92,7 +87,6 @@
               </div>
             </div>
 
-            <!-- Right Controls -->
             <div class="controls-right">
               <button class="control-btn" @click="toggleSpeed">
                 <span>{{ speeds[playbackRateIndex] }}x</span>
@@ -567,4 +561,4 @@ onUnmounted(() => {
   border-radius: 50%;
   cursor: pointer;
 }
-</style>
+</style>s
