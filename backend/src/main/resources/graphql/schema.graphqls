@@ -1,0 +1,23 @@
+type Movie {
+  id: ID!
+  title: String!
+  description: String
+  thumbnailUrl: String
+  videoUrls: [VideoQuality!]!
+  subtitles: [Subtitle!]
+}
+
+type VideoQuality {
+  quality: String!
+  url: String!
+}
+
+type Subtitle {
+  lang: String!
+  url: String!
+}
+
+type Query {
+  movies: [Movie!]!
+  movie(id: ID!): Movie
+}
