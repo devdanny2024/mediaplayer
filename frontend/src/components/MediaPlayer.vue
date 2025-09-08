@@ -243,6 +243,147 @@ function handleTouchEnd() {
   setTimeout(() => (isDragging.value = false), 50);
 }
 
+// IMPROVED AUTO-LANDSCAPE FUNCTIONALITY
+function handlePlay() {
+  playing.value = true;
+  loading.value = false;
+  
+  // Enhanced auto-landscape for mobile
+  requestLandscapeMode();
+}
+
+// Auto-landscape functions
+function requestLandscapeMode() {
+  // Check if we're on a mobile device
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  
+  if (!isMobile) return;
+  
+  try {
+    // Method 1: Modern Screen Orientation API
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape-primary')
+        .then(() => {
+          console.log('Orientation locked to landscape');
+        })
+        .catch((error) => {
+          console.log('Orientation lock failed:', error.message);
+          // Fallback to other methods
+          tryAlternateLandscapeMethods();
+        });
+    } 
+    // Method 2: Older webkit prefix
+    else if (screen.lockOrientation) {
+      const result = screen.lockOrientation('landscape-primary') || 
+                    screen.lockOrientation('landscape');
+      if (!result) {
+        tryAlternateLandscapeMethods();
+      }
+    }
+    // Method 3: Even older webkit prefix
+    else if (screen.webkitLockOrientation) {
+      const result = screen.webkitLockOrientation('landscape-primary') || 
+                    screen.webkitLockOrientation('landscape');
+      if (!result) {
+        tryAlternateLandscapeMethods();
+      }
+    }
+    // Method 4: Mozilla prefix
+    else if (screen.mozLockOrientation) {
+      const result = screen.mozLockOrientation('landscape-primary') || 
+                    screen.mozLockOrientation('landscape');
+      if (!result) {
+        tryAlternateLandscapeMethods();
+      }
+    }
+    // Method 5: MS prefix
+    else if (screen.msLockOrientation) {
+      const result = screen.msLockOrientation('landscape-primary') || 
+                    screen.msLockOrientation('landscape');
+      if (!result) {
+        tryAlternateLandscapeMethods();
+      }
+    }
+    else {
+      // No orientation API available
+      tryAlternateLandscapeMethods();
+    }
+  } catch (error) {
+    console.log('Orientation lock error:', error);
+    tryAlternateLandscapeMethods();
+  }
+}
+
+// Fallback methods when orientation lock doesn't work
+function tryAlternateLandscapeMethods() {
+  // Method 1: Prompt user to rotate device
+  if (window.orientation !== undefined) {
+    const currentOrientation = Math.abs(window.orientation);
+    if (currentOrientation !== 90) {
+      showRotationPrompt();
+    }
+  }
+  
+  // Method 2: CSS-based landscape optimization
+  optimizeForLandscape();
+}
+
+// Show a prompt asking user to rotate device
+function showRotationPrompt() {
+  // Check if prompt already exists
+  if (document.querySelector('.rotate-prompt')) return;
+  
+  const rotatePrompt = document.createElement('div');
+  rotatePrompt.className = 'rotate-prompt';
+  rotatePrompt.innerHTML = `
+    <div class="rotate-content">
+      <div class="rotate-icon">📱</div>
+      <p>Please rotate your device to landscape for the best viewing experience</p>
+    </div>
+  `;
+  
+  document.body.appendChild(rotatePrompt);
+  
+  // Remove prompt when orientation changes
+  const handleOrientationChange = () => {
+    const currentOrientation = Math.abs(window.orientation || 0);
+    if (currentOrientation === 90) {
+      rotatePrompt.remove();
+      window.removeEventListener('orientationchange', handleOrientationChange);
+    }
+  };
+  
+  window.addEventListener('orientationchange', handleOrientationChange);
+  
+  // Auto-remove prompt after 5 seconds
+  setTimeout(() => {
+    if (rotatePrompt.parentNode) {
+      rotatePrompt.remove();
+    }
+    window.removeEventListener('orientationchange', handleOrientationChange);
+  }, 5000);
+}
+
+// Optimize video player for landscape viewing
+function optimizeForLandscape() {
+  const playerContainer = document.querySelector('.player-container');
+  if (playerContainer) {
+    playerContainer.style.width = '100vw';
+    playerContainer.style.height = '100vh';
+  }
+}
+
+// Handle orientation changes
+function handleOrientationChange() {
+  setTimeout(() => {
+    const currentOrientation = Math.abs(window.orientation || 0);
+    if (currentOrientation === 90 && playing.value) {
+      // Device is in landscape, optimize UI
+      optimizeForLandscape();
+    }
+  }, 100); // Small delay to ensure orientation change is complete
+}
+
 // Keyboard Controls
 function handleKeyDown(event) {
   if (event.target.tagName === "INPUT") return;
@@ -307,20 +448,14 @@ function initializePlayer() {
   updateVolumeState();
   video.value.playbackRate = speeds[playbackRateIndex.value];
 }
-function handlePlay() {
-  playing.value = true;
-  loading.value = false;
-  // Force landscape on mobile
-  if (screen.orientation && screen.orientation.lock) {
-    screen.orientation.lock("landscape").catch(() => {});
-  }
-}
 
 // Lifecycle
 onMounted(() => {
   document.addEventListener("mousemove", handleUserActivity);
   window.addEventListener("keydown", handleKeyDown);
   window.addEventListener("keyup", handleKeyUp);
+  // Listen for orientation changes
+  window.addEventListener('orientationchange', handleOrientationChange);
   handleUserActivity();
 });
 
@@ -329,6 +464,8 @@ onUnmounted(() => {
   document.removeEventListener("mousemove", handleUserActivity);
   window.removeEventListener("keydown", handleKeyDown);
   window.removeEventListener("keyup", handleKeyUp);
+  // Clean up orientation listener
+  window.removeEventListener('orientationchange', handleOrientationChange);
 });
 </script>
 
@@ -561,4 +698,84 @@ onUnmounted(() => {
   border-radius: 50%;
   cursor: pointer;
 }
-</style>s
+
+/* ROTATION PROMPT STYLES */
+.rotate-prompt {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: 10000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.rotate-content {
+  text-align: center;
+  padding: 40px 20px;
+  max-width: 300px;
+}
+
+.rotate-icon {
+  font-size: 80px;
+  margin-bottom: 20px;
+  animation: rotate-animation 2s linear infinite;
+  display: inline-block;
+}
+
+.rotate-content p {
+  font-size: 18px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+@keyframes rotate-animation {
+  0% { transform: rotate(0deg); }
+  25% { transform: rotate(-15deg); }
+  75% { transform: rotate(15deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* LANDSCAPE OPTIMIZATIONS */
+@media (orientation: landscape) and (max-width: 896px) {
+  .player-overlay {
+    width: 100vw;
+    height: 100vh;
+  }
+  
+  .video-player {
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+  }
+  
+  .controls-wrapper {
+    padding: 0 40px 15px;
+  }
+  
+  .back-btn {
+    top: 15px;
+    left: 15px;
+  }
+}
+
+/* PORTRAIT MODE WARNING FOR MOBILE */
+@media (orientation: portrait) and (max-width: 896px) {
+  .player-overlay::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+    z-index: 5;
+  }
+}
+</style>
