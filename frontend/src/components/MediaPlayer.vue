@@ -1,13 +1,15 @@
 <template>
   <div class="player-overlay">
     <div class="player-container">
-      <!-- 1. Seek Indicator MOVED OUTSIDE player-ui -->
-      <!-- This ensures it stays visible even when controls fade out -->
+      <!-- Seek Indicator -->
       <div class="seek-indicator" :class="{ visible: seekIndicatorVisible }">
         <img v-if="seekTimeOffset > 0" src="/icons/next.png" alt="Forward" />
         <img v-else src="/icons/back.png" alt="Rewind" />
         <span>{{ formattedSeekOffset }}</span>
       </div>
+
+      <!-- Loading Spinner -->
+      <div v-if="loading" class="loading-spinner"></div>
 
       <div
         class="player-ui"
@@ -21,18 +23,20 @@
           ref="video"
           class="video-player"
           autoplay
-          
+          playsinline
           @loadedmetadata="initializePlayer"
           @timeupdate="updateProgress"
           @volumechange="updateVolumeState"
-          @play="() => (playing = true)"
+          @play="handlePlay"
           @pause="() => (playing = false)"
+          @waiting="loading = true"
+          @playing="loading = false"
         >
           <source :src="selectedUrl" type="video/mp4" />
           Your browser does not support video.
         </video>
 
-        <div v-if="!playing" class="center-play-pause">
+        <div v-if="!playing && !loading" class="center-play-pause">
           <img src="/icons/play-button.png" alt="Play" />
         </div>
 
@@ -40,7 +44,7 @@
           <img src="/icons/arrow.png" alt="Back" />
         </button>
 
-        <!-- 2. UPDATED Control Bar Layout -->
+        <!-- Controls -->
         <div class="controls-wrapper" @click.stop>
           <div class="progress-bar-container" @click="seek">
             <div class="progress-bar">
@@ -88,8 +92,6 @@
               </div>
             </div>
 
-            <!-- Center Controls Removed As Per Your Code -->
-
             <!-- Right Controls -->
             <div class="controls-right">
               <button class="control-btn" @click="toggleSpeed">
@@ -116,7 +118,6 @@ const props = defineProps({
   movie: Object,
 });
 
-// --- STATE REFS ---
 const video = ref(null);
 const playing = ref(false);
 const fullscreen = ref(false);
@@ -140,8 +141,9 @@ let seekIndicatorTimer = null;
 const isKeyDown = ref(false);
 let keyHoldTimer = null;
 let holdSkipAmount = 15;
+const loading = ref(true);
 
-// --- COMPUTED PROPERTIES ---
+// Format Time
 const formatTime = (time) => {
   if (isNaN(time)) return "00:00";
   const mins = Math.floor(time / 60);
@@ -155,7 +157,7 @@ const formattedSeekOffset = computed(() => {
   return `${sign}${Math.round(seekTimeOffset.value)}s`;
 });
 
-// --- CONTROL VISIBILITY ---
+// Hide controls after inactivity
 function hideControls() {
   if (playing.value && !isDragging.value) controlsVisible.value = false;
 }
@@ -165,7 +167,7 @@ function handleUserActivity() {
   inactivityTimer = setTimeout(hideControls, 3000);
 }
 
-// --- SEEK INDICATOR ---
+// Seek Indicator
 function showSeekIndicator(offset) {
   seekTimeOffset.value = offset;
   seekIndicatorVisible.value = true;
@@ -175,7 +177,7 @@ function showSeekIndicator(offset) {
   }, 800);
 }
 
-// --- PLAYER CONTROLS ---
+// Controls
 function togglePlay() {
   if (!video.value) return;
   video.value.paused ? video.value.play() : video.value.pause();
@@ -219,11 +221,9 @@ function seek(event) {
   video.value.currentTime = duration.value * percentage;
 }
 
-// --- MOBILE DRAG/TOUCH CONTROLS ---
+// Mobile Touch
 function handleTap() {
-  if (!isDragging.value) {
-    togglePlay();
-  }
+  if (!isDragging.value) togglePlay();
 }
 function handleTouchStart(event) {
   wasPlayingBeforeDrag.value = playing.value;
@@ -236,7 +236,7 @@ function handleTouchMove(event) {
   isDragging.value = true;
   if (!video.value) return;
   const deltaX = event.touches[0].clientX - dragStartX.value;
-  const seekOffset = deltaX * 0.5; // Sensitivity
+  const seekOffset = deltaX * 0.5;
   const newTime = Math.max(
     0,
     Math.min(duration.value, dragStartTime.value + seekOffset)
@@ -245,36 +245,29 @@ function handleTouchMove(event) {
   showSeekIndicator(newTime - dragStartTime.value);
 }
 function handleTouchEnd() {
-  if (wasPlayingBeforeDrag.value) {
-    video.value.play();
-  }
-  setTimeout(() => {
-    isDragging.value = false;
-  }, 50);
+  if (wasPlayingBeforeDrag.value) video.value.play();
+  setTimeout(() => (isDragging.value = false), 50);
 }
 
-// --- 3. UPDATED KEYBOARD CONTROLS ---
+// Keyboard Controls
 function handleKeyDown(event) {
-  // Ignore keyboard events if a text input is focused
-  if (event.target.tagName === 'INPUT') return;
-
-  handleUserActivity(); // Treat any key press as user activity
-  
-  switch(event.key.toLowerCase()) {
-    case ' ':
+  if (event.target.tagName === "INPUT") return;
+  handleUserActivity();
+  switch (event.key.toLowerCase()) {
+    case " ":
       event.preventDefault();
       togglePlay();
       break;
-    case 'm':
+    case "m":
       event.preventDefault();
       toggleMute();
       break;
-    case 'f':
+    case "f":
       event.preventDefault();
       toggleFullscreen();
       break;
-    case 'arrowright':
-    case 'arrowleft':
+    case "arrowright":
+    case "arrowleft":
       event.preventDefault();
       if (isKeyDown.value) return;
       isKeyDown.value = true;
@@ -303,7 +296,7 @@ function handleKeyUp(event) {
   }
 }
 
-// --- VIDEO EVENT HANDLERS ---
+// Video Events
 function updateProgress() {
   if (!video.value) return;
   currentTime.value = video.value.currentTime;
@@ -319,12 +312,17 @@ function initializePlayer() {
   duration.value = video.value.duration;
   updateVolumeState();
   video.value.playbackRate = speeds[playbackRateIndex.value];
-  video.value.play().catch(() => {
-    playing.value = false;
-  });
+}
+function handlePlay() {
+  playing.value = true;
+  loading.value = false;
+  // Force landscape on mobile
+  if (screen.orientation && screen.orientation.lock) {
+    screen.orientation.lock("landscape").catch(() => {});
+  }
 }
 
-// --- LIFECYCLE HOOKS ---
+// Lifecycle
 onMounted(() => {
   document.addEventListener("mousemove", handleUserActivity);
   window.addEventListener("keydown", handleKeyDown);
@@ -341,7 +339,6 @@ onUnmounted(() => {
 </script>
 
 <style>
-/* --- BASE & LAYOUT --- */
 .player-overlay {
   position: fixed;
   inset: 0;
@@ -377,7 +374,26 @@ onUnmounted(() => {
   cursor: none;
 }
 
-/* --- INDICATORS & OVERLAYS --- */
+/* Loading Spinner */
+.loading-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border: 6px solid rgba(255, 255, 255, 0.3);
+  border-top: 6px solid #ff6404;
+  border-radius: 50%;
+  width: 70px;
+  height: 70px;
+  animation: spin 1s linear infinite;
+  z-index: 30;
+}
+@keyframes spin {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* Seek Indicator */
 .seek-indicator {
   position: absolute;
   top: 50%;
@@ -387,7 +403,7 @@ onUnmounted(() => {
   background-color: rgba(0, 0, 0, 0.6);
   border-radius: 12px;
   padding: 12px 24px;
-  font-size: 24px;
+  font-size: 28px;
   font-weight: bold;
   display: flex;
   align-items: center;
@@ -400,8 +416,8 @@ onUnmounted(() => {
   opacity: 1;
 }
 .seek-indicator img {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
 }
 .center-play-pause {
   position: absolute;
@@ -412,20 +428,20 @@ onUnmounted(() => {
   background-color: rgba(0, 0, 0, 0.4);
   border: 2px solid rgba(255, 255, 255, 0.8);
   border-radius: 50%;
-  width: 80px;
-  height: 80px;
+  width: 100px;
+  height: 100px;
   display: flex;
   justify-content: center;
   align-items: center;
   pointer-events: none;
 }
 .center-play-pause img {
-  width: 45px;
-  height: 45px;
+  width: 60px;
+  height: 60px;
   margin-left: 5px;
 }
 
-/* --- BUTTONS --- */
+/* Buttons */
 .back-btn {
   position: absolute;
   top: 20px;
@@ -434,41 +450,41 @@ onUnmounted(() => {
   border: none;
   cursor: pointer;
   z-index: 20;
-  padding: 10px;
+  padding: 12px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .back-btn img {
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
 }
 .control-btn {
   background: transparent;
   border: none;
   cursor: pointer;
   color: #fff;
-  padding: 8px;
+  padding: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .control-btn img {
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   transition: transform 0.2s ease;
 }
 .control-btn span {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: bold;
 }
 .control-btn:hover img,
 .control-btn:hover span {
-  transform: scale(1.15);
+  transform: scale(1.2);
 }
 
-/* --- BOTTOM CONTROLS WRAPPER --- */
+/* Controls Wrapper */
 .controls-wrapper {
   position: absolute;
   bottom: 0;
@@ -489,35 +505,34 @@ onUnmounted(() => {
 .controls-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 20px;
 }
 
-/* --- PROGRESS & TIME --- */
+/* Progress & Time */
 .progress-bar-container {
   width: 100%;
-  padding: 10px 0;
+  padding: 12px 0;
   cursor: pointer;
 }
 .progress-bar {
   width: 100%;
-  height: 4px;
+  height: 6px;
   background-color: rgba(255, 255, 255, 0.3);
   position: relative;
   border-radius: 5px;
 }
 .progress-filled {
   height: 100%;
-  /* 4. UPDATED Theme Color */
   background-color: #ff6404;
   border-radius: 5px;
   width: 0%;
 }
 .time-display {
-  font-size: 14px;
+  font-size: 15px;
   margin-left: 12px;
 }
 
-/* --- VOLUME SLIDER --- */
+/* Volume Slider */
 .volume-controls {
   display: flex;
   align-items: center;
@@ -526,7 +541,7 @@ onUnmounted(() => {
   -webkit-appearance: none;
   width: 0;
   padding-left: 10px;
-  height: 4px;
+  height: 6px;
   background: rgba(255, 255, 255, 0.3);
   border-radius: 5px;
   outline: none;
@@ -534,23 +549,22 @@ onUnmounted(() => {
   cursor: pointer;
 }
 .volume-controls:hover .volume-slider {
-  width: 80px;
+  width: 100px;
 }
 .volume-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   background: #fff;
   border-radius: 50%;
   cursor: pointer;
 }
 .volume-slider::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
-    background: #fff;
-    border-radius: 50%;
-    cursor: pointer;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  cursor: pointer;
 }
 </style>
-
